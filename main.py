@@ -7,7 +7,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 mnist = input_data.read_data_sets('MNIST')
 
-input_dim = 784
+input_dim = 784 # 28 x 28
 hidden_encoder_dim = 400
 hidden_decoder_dim = 400
 latent_dim = 20
