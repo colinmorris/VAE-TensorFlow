@@ -3,15 +3,22 @@ from __future__ import print_function
 import os.path
 
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist import input_data
+from dataset import load_dataset
+import sys
+import numpy as np
 
-mnist = input_data.read_data_sets('MNIST')
-
-input_dim = 784 # 28 x 28
+dataset = load_dataset(sys.argv[1])
+sample = dataset.sample_img()
+input_dim = np.product(sample.shape)
+# TODO: turn these into flags?
 hidden_encoder_dim = 400
 hidden_decoder_dim = 400
 latent_dim = 20
-lam = 0
+lam = 0 # Scaling factor for L2 loss
+n_steps = int(1e6) # 1m
+batch_size = 100
+PRINT_EVERY = 50
+SAVE_EVERY = 500
 
 def weight_variable(shape):
   initial = tf.truncated_normal(shape, stddev=0.001)
@@ -81,9 +88,6 @@ summary_op = tf.merge_all_summaries()
 # add Saver ops
 saver = tf.train.Saver()
 
-n_steps = int(1e6)
-batch_size = 100
-
 with tf.Session() as sess:
   summary_writer = tf.train.SummaryWriter('experiment',
                                           graph=sess.graph)
@@ -95,13 +99,15 @@ with tf.Session() as sess:
     sess.run(tf.initialize_all_variables())
 
   for step in range(1, n_steps):
-    batch = mnist.train.next_batch(batch_size)
-    feed_dict = {x: batch[0]}
+    batch = dataset.next_batch(batch_size)
+    feed_dict = {x: batch}
     _, cur_loss, summary_str = sess.run([train_step, loss, summary_op], feed_dict=feed_dict)
     summary_writer.add_summary(summary_str, step)
 
-    if step % 50 == 0:
-      save_path = saver.save(sess, "save/model.ckpt")
+    if step % PRINT_EVERY == 0:
       print("Step {0} | Loss: {1}".format(step, cur_loss))
+    if step % SAVE_EVERY == 0:
+      print "Saving model to 'save/model.ckpt'"
+      save_path = saver.save(sess, "save/model.ckpt")
 
 
