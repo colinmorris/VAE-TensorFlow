@@ -6,6 +6,8 @@ import tensorflow as tf
 from dataset import load_dataset
 import sys
 import numpy as np
+import os
+from scipy.misc import imsave
 
 dataset = load_dataset(sys.argv[1])
 sample = dataset.sample_img()
@@ -19,6 +21,7 @@ n_steps = int(1e6) # 1m
 batch_size = 100
 PRINT_EVERY = 50
 SAVE_EVERY = 500
+SAMPLE_EVERY = 50
 
 def weight_variable(shape):
   initial = tf.truncated_normal(shape, stddev=0.001)
@@ -27,6 +30,13 @@ def weight_variable(shape):
 def bias_variable(shape):
   initial = tf.constant(0., shape=shape)
   return tf.Variable(initial)
+
+def save_samples(samples, step):
+    for i, sample in enumerate(samples):
+        fname = 'sample_{}_{}.png'.format(step, i)
+        path = os.path.join('samples', fname)
+        imsave(path, sample, format='RGBA')
+
 
 x = tf.placeholder("float", shape=[None, input_dim])
 l2_loss = tf.constant(0.0)
@@ -65,6 +75,8 @@ l2_loss += tf.nn.l2_loss(W_decoder_z_hidden)
 
 # Hidden layer decoder
 hidden_decoder = tf.nn.relu(tf.matmul(z, W_decoder_z_hidden) + b_decoder_z_hidden)
+# Kind of a hack. Make copies of these variables that use epsilon (random normal) as latent input
+hidden_decoder_sample = tf.nn.relu(tf.matmul(epsilon, W_decoder_z_hidden) + b_decoder_z_hidden)
 
 W_decoder_hidden_reconstruction = weight_variable([hidden_decoder_dim, input_dim])
 b_decoder_hidden_reconstruction = bias_variable([input_dim])
@@ -73,6 +85,7 @@ l2_loss += tf.nn.l2_loss(W_decoder_hidden_reconstruction)
 KLD = -0.5 * tf.reduce_sum(1 + logvar_encoder - tf.pow(mu_encoder, 2) - tf.exp(logvar_encoder), reduction_indices=1)
 
 x_hat = tf.matmul(hidden_decoder, W_decoder_hidden_reconstruction) + b_decoder_hidden_reconstruction
+sample = tf.matmul(hidden_decoder_sample, W_decoder_hidden_reconstruction) + b_decoder_hidden_reconstruction
 BCE = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(x_hat, x), reduction_indices=1)
 
 loss = tf.reduce_mean(BCE + KLD)
@@ -100,7 +113,7 @@ with tf.Session() as sess:
 
   for step in range(1, n_steps):
     batch = dataset.next_batch(batch_size)
-    feed_dict = {x: batch}
+    feed_dict = {x: batch} # TODO: probably need to flatten this?
     _, cur_loss, summary_str = sess.run([train_step, loss, summary_op], feed_dict=feed_dict)
     summary_writer.add_summary(summary_str, step)
 
@@ -108,6 +121,9 @@ with tf.Session() as sess:
       print("Step {0} | Loss: {1}".format(step, cur_loss))
     if step % SAVE_EVERY == 0:
       print "Saving model to 'save/model.ckpt'"
-      save_path = saver.save(sess, "save/model.ckpt")
-
+      # TODO: Add some code that can actually load a checkpointed model from one of these?
+      save_path = saver.save(sess, "save/model_{}.ckpt".format(step))
+    if step % SAMPLE_EVERY == 0:
+        samples = sess.run([sample])
+        save_samples(samples, step)
 
